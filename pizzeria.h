@@ -13,10 +13,10 @@
 #define T_ORD_HI 3
 #define N_ORD_LO 1
 #define N_ORD_HI 5
-#define P_PLAIN 0.6
+#define P_PLAIN 60
 #define T_PAY_LO 1
 #define T_PAY_HI 3
-#define P_FAIL 0.1
+#define P_FAIL 10
 #define C_PLAIN 10
 #define C_SPECIAL 12
 #define T_PREP 1
