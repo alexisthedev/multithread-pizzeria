@@ -49,6 +49,46 @@ void print_msg(char* msg, int oid) {
     }
 }
 
+void init_mutex(pthread_mutex_t *M) {
+    // Wrapper function to initialize mutexes and check for errors
+    int rc;
+    rc = pthread_mutex_init(M, NULL);
+    if (rc != 0) {
+   		printf("[Main] Error: return code from pthread_mutex_init() is %d\n", rc);
+        exit(-1);
+	}
+}
+
+void destroy_mutex(pthread_mutex_t *M) {
+    // Wrapper function to destroy mutexes and check for errors
+    int rc;
+    rc = pthread_mutex_destroy(M);
+    if (rc != 0) {
+        printf("[Main] Error: return code from pthread_mutex_destroy() is %d\n", rc);
+        exit(-1);
+    }
+}
+
+void init_cond(pthread_cond_t *C) {
+    // Wrapper function to initialize cond vars and check for errors
+    int rc;
+    rc = pthread_cond_init(C, NULL);
+    if (rc != 0) {
+   		printf("[Main] Error: return code from pthread_cond_init() is %d\n", rc);
+        exit(-1);
+	}
+}
+
+void destroy_cond(pthread_cond_t *C) {
+    // Wrapper function to destroy cond vars and check for errors
+    int rc;
+    rc = pthread_cond_destroy(C);
+    if (rc != 0) {
+   		printf("[Main] Error: return code from pthread_cond_destroy() is %d\n", rc);
+        exit(-1);
+	}
+}
+
 
 void *makeOrder(void* t) {
     /* This function is the routine that
@@ -394,62 +434,18 @@ int main(int argc, char **argv) {
 
     // Mutex and Cond initialization
     int rc;
-    rc = pthread_mutex_init(&PRINT_MUTEX, NULL);
-    if (rc != 0) {
-   		printf("[Main] Error: return code from pthread_mutex_init() is %d\n", rc);
-        exit(-1);
-	}
-    rc = pthread_mutex_init(&PIZZA_STAT_MUTEX, NULL);
-    if (rc != 0) {
-   		printf("[Main] Error: return code from pthread_mutex_init() is %d\n", rc);
-        exit(-1);
-	}
-    rc = pthread_mutex_init(&PREP_MUTEX, NULL);
-    if (rc != 0) {
-   		printf("[Main] Error: return code from pthread_mutex_init() is %d\n", rc);
-        exit(-1);
-	}
-    rc = pthread_mutex_init(&OVEN_MUTEX, NULL);
-    if (rc != 0) {
-   		printf("[Main] Error: return code from pthread_mutex_init() is %d\n", rc);
-        exit(-1);
-	}
-    rc = pthread_mutex_init(&PACK_MUTEX, NULL);
-    if (rc != 0) {
-   		printf("[Main] Error: return code from pthread_mutex_init() is %d\n", rc);
-        exit(-1);
-	}
-    rc = pthread_mutex_init(&DELI_MUTEX, NULL);
-    if (rc != 0) {
-   		printf("[Main] Error: return code from pthread_mutex_init() is %d\n", rc);
-        exit(-1);
-	}
-    rc = pthread_mutex_init(&TIME_MUTEX, NULL);
-    if (rc != 0) {
-   		printf("[Main] Error: return code from pthread_mutex_init() is %d\n", rc);
-        exit(-1);
-	}
+    init_mutex(&PRINT_MUTEX);
+    init_mutex(&PIZZA_STAT_MUTEX);
+    init_mutex(&PREP_MUTEX);
+    init_mutex(&OVEN_MUTEX);
+    init_mutex(&PACK_MUTEX);
+    init_mutex(&DELI_MUTEX);
+    init_mutex(&TIME_MUTEX);
 
-    rc = pthread_cond_init(&PREP_COND, NULL);
-    if (rc != 0) {
-   		printf("[Main] Error: return code from pthread_cond_init() is %d\n", rc);
-        exit(-1);
-	}
-    rc = pthread_cond_init(&OVEN_COND, NULL);
-    if (rc != 0) {
-   		printf("[Main] Error: return code from pthread_cond_init() is %d\n", rc);
-        exit(-1);
-	}
-    rc = pthread_cond_init(&PACK_COND, NULL);
-    if (rc != 0) {
-   		printf("[Main] Error: return code from pthread_cond_init() is %d\n", rc);
-        exit(-1);
-	}
-    rc = pthread_cond_init(&DELI_COND, NULL);
-    if (rc != 0) {
-   		printf("[Main] Error: return code from pthread_cond_init() is %d\n", rc);
-        exit(-1);
-	}
+    init_cond(&PREP_COND);
+    init_cond(&OVEN_COND);
+    init_cond(&PACK_COND);
+    init_cond(&DELI_COND);
 
     // Order thread creation
     pthread_t *threads = malloc(customers * sizeof(pthread_t));
@@ -493,62 +489,18 @@ int main(int argc, char **argv) {
     printf("Avg. order cooling time: %dmin\nMax order cooling time: %dmin\n", total_cooling_time/(customers-failed), max_cooling_time);
 
     // Destroy mutexes and conds / close up shop
-    rc = pthread_mutex_destroy(&PRINT_MUTEX);
-    if (rc != 0) {
-   		printf("[Main] Error: return code from pthread_mutex_destroy() is %d\n", rc);
-        exit(-1);
-	}
-    rc = pthread_mutex_destroy(&PIZZA_STAT_MUTEX);
-    if (rc != 0) {
-   		printf("[Main] Error: return code from pthread_mutex_destroy() is %d\n", rc);
-        exit(-1);
-	}
-    rc = pthread_mutex_destroy(&PREP_MUTEX);
-    if (rc != 0) {
-   		printf("[Main] Error: return code from pthread_mutex_destroy() is %d\n", rc);
-        exit(-1);
-	}
-    rc = pthread_mutex_destroy(&OVEN_MUTEX);
-    if (rc != 0) {
-   		printf("[Main] Error: return code from pthread_mutex_destroy() is %d\n", rc);
-        exit(-1);
-	}
-    rc = pthread_mutex_destroy(&PACK_MUTEX);
-    if (rc != 0) {
-   		printf("[Main] Error: return code from pthread_mutex_destroy() is %d\n", rc);
-        exit(-1);
-	}
-    rc = pthread_mutex_destroy(&DELI_MUTEX);
-    if (rc != 0) {
-   		printf("[Main] Error: return code from pthread_mutex_destroy() is %d\n", rc);
-        exit(-1);
-	}
-    rc = pthread_mutex_destroy(&TIME_MUTEX);
-    if (rc != 0) {
-   		printf("[Main] Error: return code from pthread_mutex_destroy() is %d\n", rc);
-        exit(-1);
-	}
+    destroy_mutex(&PRINT_MUTEX);
+    destroy_mutex(&PIZZA_STAT_MUTEX);
+    destroy_mutex(&PREP_MUTEX);
+    destroy_mutex(&OVEN_MUTEX);
+    destroy_mutex(&PACK_MUTEX);
+    destroy_mutex(&DELI_MUTEX);
+    destroy_mutex(&TIME_MUTEX);
 
-    rc = pthread_cond_destroy(&PREP_COND);
-    if (rc != 0) {
-   		printf("[Main] Error: return code from pthread_cond_destroy() is %d\n", rc);
-        exit(-1);
-	}
-    rc = pthread_cond_destroy(&OVEN_COND);
-    if (rc != 0) {
-   		printf("[Main] Error: return code from pthread_cond_destroy() is %d\n", rc);
-        exit(-1);
-	}
-    rc = pthread_cond_destroy(&PACK_COND);
-    if (rc != 0) {
-   		printf("[Main] Error: return code from pthread_cond_destroy() is %d\n", rc);
-        exit(-1);
-	}
-    rc = pthread_cond_destroy(&DELI_COND);
-    if (rc != 0) {
-   		printf("[Main] Error: return code from pthread_cond_destroy() is %d\n", rc);
-        exit(-1);
-	}
+    destroy_cond(&PREP_COND);
+    destroy_cond(&OVEN_COND);
+    destroy_cond(&PACK_COND);
+    destroy_cond(&DELI_COND);
 
     free(threads);
     return 0;
