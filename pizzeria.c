@@ -8,6 +8,7 @@ int special_pizzas_made = 0;
 int cooks = N_COOK;
 int ovens = N_OVEN;
 int packers = N_PACKER;
+int deliveras = N_DELI;
 
 // Mutexes
 pthread_mutex_t PRINT_MUTEX;
@@ -15,11 +16,13 @@ pthread_mutex_t PIZZA_STAT_MUTEX;
 pthread_mutex_t PREP_MUTEX;
 pthread_mutex_t OVEN_MUTEX;
 pthread_mutex_t PACK_MUTEX;
+pthread_mutex_t DELI_MUTEX;
 
 // Cond Vars
 pthread_cond_t PREP_COND;
 pthread_cond_t OVEN_COND;
 pthread_cond_t PACK_COND;
+pthread_cond_t DELI_COND;
 
 int print_msg(char* msg, int oid) {
     /* This function is used as a shorthand
@@ -82,9 +85,6 @@ void *makeOrder(void* t) {
         pthread_exit(&rc);
     }
 
-    rc = print_msg("Payment succesful.", oid);
-    if (rc != 0) pthread_exit(&rc);
-
     // Calculate order price and pizza%
     int plain = 0;
     int special = 0;
@@ -117,7 +117,9 @@ void *makeOrder(void* t) {
         printf("[Order %d] Error: return code from pthread_mutex_lock() is %d.\n", oid, rc);
         pthread_exit(&rc);
     }
+
     printf("[Order %d] Cha-ching! Order %d costs $%d.\n", oid, oid, (plain*C_PLAIN + special*C_SPECIAL));
+
     rc = pthread_mutex_unlock(&PRINT_MUTEX);
     if (rc != 0) {
         printf("[Order %d] Error: return code from pthread_mutex_unlock() is %d.\n", oid, rc);
@@ -130,16 +132,15 @@ void *makeOrder(void* t) {
         printf("[T%d] Error: return code from pthread_mutex_lock() is %d.\n", oid, rc);
         pthread_exit(&rc);
     }
-    while (cooks < 1) {
-        rc = print_msg("No available cooks at this time, waiting...", oid);
-        if (rc != 0) pthread_exit(&rc);
 
+    while (cooks < 1) {
         rc = pthread_cond_wait(&PREP_COND, &PREP_MUTEX);
         if (rc != 0) {
             printf("[Order %d] Error: return code from pthread_cond_wait() is %d.\n", oid, rc);
         }
     }
     cooks--;
+
     rc = pthread_mutex_unlock(&PREP_MUTEX);
     if (rc != 0) {
         printf("[Order %d] Error: return code from pthread_mutex_unlock() is %d.\n", oid, rc);
@@ -156,16 +157,15 @@ void *makeOrder(void* t) {
         printf("[Order %d] Error: return code from pthread_mutex_lock() is %d.\n", oid, rc);
         pthread_exit(&rc);
     }
-    while (ovens < pizza_num) {
-        rc = print_msg("No available ovens at this time, waiting...", oid);
-        if (rc != 0) pthread_exit(&rc);
 
+    while (ovens < pizza_num) {
         rc = pthread_cond_wait(&OVEN_COND, &OVEN_MUTEX);
         if (rc != 0) {
             printf("[Order %d] Error: return code from pthread_cond_wait() is %d.\n", oid, rc);
         }
     }
     ovens -= pizza_num;
+
     rc = pthread_mutex_unlock(&OVEN_MUTEX);
     if (rc != 0) {
         printf("[Order %d] Error: return code from pthread_mutex_unlock() is %d.\n", oid, rc);
@@ -186,7 +186,6 @@ void *makeOrder(void* t) {
     if (rc != 0) {
         printf("[Order %d] Error: return code from pthread_cond_signal() is %d.\n", oid, rc);
     }
-
     rc = pthread_mutex_unlock(&PREP_MUTEX);
     if (rc != 0) {
         printf("[Order %d] Error: return code from pthread_mutex_unlock() is %d.\n", oid, rc);
@@ -206,9 +205,6 @@ void *makeOrder(void* t) {
     }
 
     while (packers < 1) {
-        rc = print_msg("No available packers at this time, waiting...", oid);
-        if (rc != 0) pthread_exit(&rc);
-
         rc = pthread_cond_wait(&PACK_COND, &PACK_MUTEX);
         if (rc != 0) {
             printf("[Order %d] Error: return code from pthread_cond_wait() is %d.\n", oid, rc);
@@ -240,7 +236,6 @@ void *makeOrder(void* t) {
     if (rc != 0) {
         printf("[Order %d] Error: return code from pthread_cond_signal() is %d.\n", oid, rc);
     }
-
     rc = pthread_mutex_unlock(&OVEN_MUTEX);
     if (rc != 0) {
         printf("[Order %d] Error: return code from pthread_mutex_unlock() is %d.\n", oid, rc);
@@ -261,8 +256,60 @@ void *makeOrder(void* t) {
     if (rc != 0) {
         printf("[Order %d] Error: return code from pthread_cond_signal() is %d.\n", oid, rc);
     }
-
     rc = pthread_mutex_unlock(&PACK_MUTEX);
+    if (rc != 0) {
+        printf("[Order %d] Error: return code from pthread_mutex_unlock() is %d.\n", oid, rc);
+        pthread_exit(&rc);
+    }
+
+    // Order delivery
+    rc = pthread_mutex_lock(&DELI_MUTEX);
+    if (rc != 0) {
+        printf("[Order %d] Error: return code from pthread_mutex_lock() is %d.\n", oid, rc);
+        pthread_exit(&rc);
+    }
+
+    while (deliveras < 1) {
+        rc = pthread_cond_wait(&DELI_COND, &DELI_MUTEX);
+        if (rc != 0) {
+            printf("[Order %d] Error: return code from pthread_cond_wait() is %d.\n", oid, rc);
+            pthread_exit(&rc);
+        }
+    }
+    deliveras--;
+
+    rc = pthread_mutex_unlock(&DELI_MUTEX);
+    if (rc != 0) {
+        printf("[Order %d] Error: return code from pthread_mutex_unlock() is %d.\n", oid, rc);
+        pthread_exit(&rc);
+    }
+
+    // Calculate delivery time
+    int delivery_time = T_DELI_LO + rand_r(&t_seed)%T_DELI_HI;
+
+    // Deliver the order
+    sleep(delivery_time);
+    rc = print_msg("Order delivered! Enjoy your pizza.", oid);
+    if (rc != 0) pthread_exit(&rc);
+
+    // Deliveras returns to store
+    sleep(delivery_time);
+
+    // Free the deliveras
+    rc = pthread_mutex_lock(&DELI_MUTEX);
+    if (rc != 0) {
+        printf("[Order %d] Error: return code from pthread_mutex_lock() is %d.\n", oid, rc);
+        pthread_exit(&rc);
+    }
+
+    deliveras++;
+
+    rc = pthread_cond_signal(&DELI_COND);
+    if (rc != 0) {
+        printf("[Order %d] Error: return code from pthread_cond_signal() is %d.\n", oid, rc);
+        pthread_exit(&rc);
+    }
+    rc = pthread_mutex_unlock(&DELI_MUTEX);
     if (rc != 0) {
         printf("[Order %d] Error: return code from pthread_mutex_unlock() is %d.\n", oid, rc);
         pthread_exit(&rc);
@@ -320,6 +367,11 @@ int main(int argc, char **argv) {
    		printf("[Main] Error: return code from pthread_mutex_init() is %d\n", rc);
         exit(-1);
 	}
+    rc = pthread_mutex_init(&DELI_MUTEX, NULL);
+    if (rc != 0) {
+   		printf("[Main] Error: return code from pthread_mutex_init() is %d\n", rc);
+        exit(-1);
+	}
 
     rc = pthread_cond_init(&PREP_COND, NULL);
     if (rc != 0) {
@@ -332,6 +384,11 @@ int main(int argc, char **argv) {
         exit(-1);
 	}
     rc = pthread_cond_init(&PACK_COND, NULL);
+    if (rc != 0) {
+   		printf("[Main] Error: return code from pthread_cond_init() is %d\n", rc);
+        exit(-1);
+	}
+    rc = pthread_cond_init(&DELI_COND, NULL);
     if (rc != 0) {
    		printf("[Main] Error: return code from pthread_cond_init() is %d\n", rc);
         exit(-1);
@@ -360,6 +417,10 @@ int main(int argc, char **argv) {
             printf("[Main] Error: return code from pthread_join(t%d) is %d.\n", ids[i], rc);
             exit(-1);
         }
+
+        // Do not print for orders that had their payment declined
+        // or that were stopped due to an error.
+        if (*(int*)status != ids[i]) continue;
         printf("[Main] Closed out order %d.\n", ids[i]);
     }
 
@@ -391,6 +452,11 @@ int main(int argc, char **argv) {
    		printf("[Main] Error: return code from pthread_mutex_destroy() is %d\n", rc);
         exit(-1);
 	}
+    rc = pthread_mutex_destroy(&DELI_MUTEX);
+    if (rc != 0) {
+   		printf("[Main] Error: return code from pthread_mutex_destroy() is %d\n", rc);
+        exit(-1);
+	}
 
     rc = pthread_cond_destroy(&PREP_COND);
     if (rc != 0) {
@@ -403,6 +469,11 @@ int main(int argc, char **argv) {
         exit(-1);
 	}
     rc = pthread_cond_destroy(&PACK_COND);
+    if (rc != 0) {
+   		printf("[Main] Error: return code from pthread_cond_destroy() is %d\n", rc);
+        exit(-1);
+	}
+    rc = pthread_cond_destroy(&DELI_COND);
     if (rc != 0) {
    		printf("[Main] Error: return code from pthread_cond_destroy() is %d\n", rc);
         exit(-1);

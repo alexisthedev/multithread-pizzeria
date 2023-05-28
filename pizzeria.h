@@ -22,5 +22,5 @@
 #define T_PREP 1
 #define T_BAKE 10
 #define T_PACK 1
-#define T_DEL_LO 5
-#define T_DEL_HI 15
+#define T_DELI_LO 5
+#define T_DELI_HI 15
