@@ -9,6 +9,10 @@ int cooks = N_COOK;
 int ovens = N_OVEN;
 int packers = N_PACKER;
 int deliveras = N_DELI;
+int total_time_spent = 0;
+int max_order_time = 0;
+int total_cooling_time = 0;
+int max_cooling_time = 0;
 
 // Mutexes
 pthread_mutex_t PRINT_MUTEX;
@@ -17,6 +21,7 @@ pthread_mutex_t PREP_MUTEX;
 pthread_mutex_t OVEN_MUTEX;
 pthread_mutex_t PACK_MUTEX;
 pthread_mutex_t DELI_MUTEX;
+pthread_mutex_t TIME_MUTEX;
 
 // Cond Vars
 pthread_cond_t PREP_COND;
@@ -24,7 +29,7 @@ pthread_cond_t OVEN_COND;
 pthread_cond_t PACK_COND;
 pthread_cond_t DELI_COND;
 
-int print_msg(char* msg, int oid) {
+void print_msg(char* msg, int oid) {
     /* This function is used as a shorthand
         for when a thread must print an output
         and should first lock the screen mutex.
@@ -34,15 +39,14 @@ int print_msg(char* msg, int oid) {
     rc = pthread_mutex_lock(&PRINT_MUTEX);
     if (rc != 0) {
         printf("[Order %d] Error: return code from pthread_mutex_lock() is %d.\n", oid, rc);
-        return rc;
+        pthread_exit(&rc);
     }
     printf("[Order %d] %s\n", oid, msg);
     rc = pthread_mutex_unlock(&PRINT_MUTEX);
     if (rc != 0) {
         printf("[Order %d] Error: return code from pthread_mutex_unlock() is %d.\n", oid, rc);
-        return rc;
+        pthread_exit(&rc);
     }
-    return 0;
 }
 
 
@@ -51,6 +55,10 @@ void *makeOrder(void* t) {
         handles a thread/order from end
         to end.
     */
+
+    // Get order submission time
+    struct timespec t_start;
+    clock_gettime(CLOCK_REALTIME, &t_start);
 
     int oid = *(int*)t;
     int rc;
@@ -67,23 +75,20 @@ void *makeOrder(void* t) {
     }
 
     // Process order payment
-    rc = print_msg("Processing payment.", oid);
-    if (rc != 0) pthread_exit(&rc);
-
     sleep(T_PAY_LO + rand_r(&t_seed)%T_PAY_HI);
 
     if (rand_r(&t_seed)%100 < 10) {
         // A payment fails with 10% chance
 
         // Print that the card was declined
-        rc = print_msg("Card declined, scrapping order!", oid);
-        if (rc != 0) pthread_exit(&rc);
+        print_msg("Card declined, scrapping order!", oid);
 
         // Set rc to -1 for main() to know that this order
         // was scrapped because of payment failure
         rc = -1;
         pthread_exit(&rc);
     }
+    print_msg("Cha-ching! Payment succesful.", oid);
 
     // Calculate order price and pizza%
     int plain = 0;
@@ -104,23 +109,6 @@ void *makeOrder(void* t) {
     total_income += plain*C_PLAIN + special*C_SPECIAL;
 
     rc = pthread_mutex_unlock(&PIZZA_STAT_MUTEX);
-    if (rc != 0) {
-        printf("[Order %d] Error: return code from pthread_mutex_unlock() is %d.\n", oid, rc);
-        pthread_exit(&rc);
-    }
-
-    // The print_msg() shorthand is not used here,
-    // since we want to print a custom message
-    // that contains extra data (order_price)
-    rc = pthread_mutex_lock(&PRINT_MUTEX);
-    if (rc != 0) {
-        printf("[Order %d] Error: return code from pthread_mutex_lock() is %d.\n", oid, rc);
-        pthread_exit(&rc);
-    }
-
-    printf("[Order %d] Cha-ching! Order %d costs $%d.\n", oid, oid, (plain*C_PLAIN + special*C_SPECIAL));
-
-    rc = pthread_mutex_unlock(&PRINT_MUTEX);
     if (rc != 0) {
         printf("[Order %d] Error: return code from pthread_mutex_unlock() is %d.\n", oid, rc);
         pthread_exit(&rc);
@@ -148,8 +136,7 @@ void *makeOrder(void* t) {
     }
 
     // Cook prepares the order
-    rc = print_msg("Order now being prepared.", oid);
-    if (rc != 0) pthread_exit(&rc);
+    print_msg("Order now being prepared.", oid);
     sleep(T_PREP * pizza_num);
 
     rc = pthread_mutex_lock(&OVEN_MUTEX);
@@ -193,9 +180,12 @@ void *makeOrder(void* t) {
     }
 
     // Order is baking
-    rc = print_msg("Order is in the oven.", oid);
-    if (rc != 0) pthread_exit(&rc);
+    print_msg("Order is in the oven.", oid);
     sleep(T_BAKE);
+
+    // Keep bake completion time
+    struct timespec t_baked;
+    clock_gettime(CLOCK_REALTIME, &t_baked);
 
     // Order is being packed
     rc = pthread_mutex_lock(&PACK_MUTEX);
@@ -218,9 +208,30 @@ void *makeOrder(void* t) {
         pthread_exit(&rc);
     }
 
-    rc = print_msg("Order is being packed.", oid);
-    if (rc != 0) pthread_exit(&rc);
+    print_msg("Order is being packed.", oid);
     sleep(T_PACK * pizza_num);
+
+    // Keep ready for delivery time
+    struct timespec t_ready;
+    clock_gettime(CLOCK_REALTIME, &t_ready);
+
+    // Print how much time elapsed from order
+    // submission until it was ready for delivery.
+    // We do not use the print_msg shorthand here
+    // because we want a more custom output.
+    rc = pthread_mutex_lock(&PRINT_MUTEX);
+    if (rc != 0) {
+        printf("[Order %d] Error: return code from pthread_mutex_lock() is %d.\n", oid, rc);
+        pthread_exit(&rc);
+    }
+
+    printf("[Order %d] Order was ready in %ld minutes.\n", oid, (t_ready.tv_sec - t_start.tv_sec));
+
+    rc = pthread_mutex_unlock(&PRINT_MUTEX);
+    if (rc != 0) {
+        printf("[Order %d] Error: return code from pthread_mutex_unlock() is %d.\n", oid, rc);
+        pthread_exit(&rc);
+    }
 
     // Free the ovens
     rc = pthread_mutex_lock(&OVEN_MUTEX);
@@ -289,8 +300,49 @@ void *makeOrder(void* t) {
 
     // Deliver the order
     sleep(delivery_time);
-    rc = print_msg("Order delivered! Enjoy your pizza.", oid);
-    if (rc != 0) pthread_exit(&rc);
+
+    // Keep time of delivery
+    struct timespec t_delivered;
+    clock_gettime(CLOCK_REALTIME, &t_delivered);
+    long int order_time =  t_delivered.tv_sec - t_start.tv_sec;
+
+    // Print how much time elapsed from order
+    // submission until it was delivered.
+    // Again, we do not use the print_msg shorthand
+    // here because we want a more custom output.
+    rc = pthread_mutex_lock(&PRINT_MUTEX);
+    if (rc != 0) {
+        printf("[Order %d] Error: return code from pthread_mutex_lock() is %d.\n", oid, rc);
+        pthread_exit(&rc);
+    }
+
+    printf("[Order %d] Order was delivered in %ld minutes.\n", oid, order_time);
+
+    rc = pthread_mutex_unlock(&PRINT_MUTEX);
+    if (rc != 0) {
+        printf("[Order %d] Error: return code from pthread_mutex_unlock() is %d.\n", oid, rc);
+        pthread_exit(&rc);
+    }
+
+    // Count order times
+    // towards the time stats
+    rc = pthread_mutex_lock(&TIME_MUTEX);
+    if (rc != 0) {
+        printf("[Order %d] Error: return code from pthread_mutex_lock() is %d.\n", oid, rc);
+    }
+
+    total_time_spent += order_time;
+    max_order_time = (order_time > max_order_time) ? order_time : max_order_time;
+
+    long int cooling_time = t_delivered.tv_sec - t_baked.tv_sec;
+    total_cooling_time += cooling_time;
+    max_cooling_time = (cooling_time > max_cooling_time) ? cooling_time : max_cooling_time;
+
+    rc = pthread_mutex_unlock(&TIME_MUTEX);
+    if (rc != 0) {
+        printf("[Order %d] Error: return code from pthread_mutex_unlock() is %d.\n", oid, rc);
+    }
+
 
     // Deliveras returns to store
     sleep(delivery_time);
@@ -372,6 +424,11 @@ int main(int argc, char **argv) {
    		printf("[Main] Error: return code from pthread_mutex_init() is %d\n", rc);
         exit(-1);
 	}
+    rc = pthread_mutex_init(&TIME_MUTEX, NULL);
+    if (rc != 0) {
+   		printf("[Main] Error: return code from pthread_mutex_init() is %d\n", rc);
+        exit(-1);
+	}
 
     rc = pthread_cond_init(&PREP_COND, NULL);
     if (rc != 0) {
@@ -410,6 +467,7 @@ int main(int argc, char **argv) {
     }
 
     // Join threads / close out orders
+    int failed = 0;
     void* status;
     for (i=0; i<customers; i++) {
         rc = pthread_join(threads[i], &status);
@@ -420,11 +478,19 @@ int main(int argc, char **argv) {
 
         // Do not print for orders that had their payment declined
         // or that were stopped due to an error.
-        if (*(int*)status != ids[i]) continue;
+        if (*(int*)status != ids[i]) {
+            failed++;
+            continue;
+        }
         printf("[Main] Closed out order %d.\n", ids[i]);
     }
 
-    printf("[Main] Done for the day! Papa's Threaderia made $%d today.\n", total_income);
+    printf("\n[Main] Done for the day! Papa's Threaderia stats from today's orders:\n");
+    printf("Total Income: $%d\nPlain Pizzas Sold: %d\nSpecial Pizzas Sold: %d\n",
+        total_income, plain_pizzas_made, special_pizzas_made);
+    printf("Successful Orders#: %d\nFailed Orders#: %d\n", customers-failed, failed);
+    printf("Avg. time until delivery: %dmin\nMax time until delivery: %dmin\n", total_time_spent/(customers-failed), max_order_time);
+    printf("Avg. order cooling time: %dmin\nMax order cooling time: %dmin\n", total_cooling_time/(customers-failed), max_cooling_time);
 
     // Destroy mutexes and conds / close up shop
     rc = pthread_mutex_destroy(&PRINT_MUTEX);
@@ -453,6 +519,11 @@ int main(int argc, char **argv) {
         exit(-1);
 	}
     rc = pthread_mutex_destroy(&DELI_MUTEX);
+    if (rc != 0) {
+   		printf("[Main] Error: return code from pthread_mutex_destroy() is %d\n", rc);
+        exit(-1);
+	}
+    rc = pthread_mutex_destroy(&TIME_MUTEX);
     if (rc != 0) {
    		printf("[Main] Error: return code from pthread_mutex_destroy() is %d\n", rc);
         exit(-1);
